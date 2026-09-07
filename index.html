@@ -288,7 +288,7 @@
 
         async function fetchRealtimeBackendData() {
             try {
-                let response = await fetch('http://localhost:3000/api/volcano-status');
+                let response = await fetch('/api/volcano-status');
                 let result = await response.json();
                 if (result.success && result.data) {
                     mountains = result.data;
