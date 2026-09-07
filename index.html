@@ -290,11 +290,14 @@
             try {
                 let response = await fetch('/api/volcano-status');
                 let result = await response.json();
-                if (result.success && result.data) {
+                // Verifikasi agar backend tidak merusak array list gunung lokal jika formatnya tidak sesuai
+                if (result.success && Array.isArray(result.data)) {
                     mountains = result.data;
                     renderMountainDropdown();
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.log("Menggunakan data lokal cadangan.");
+            }
         }
 
         function renderMountainDropdown() {
@@ -547,11 +550,12 @@
             }
         }
 
+        // Inisialisasi awal agar dropdown dan elemen langsung siap
         renderMountainDropdown();
         updateEruptionStatusPanel();
         setTimeline('now');
+        updateCityDisplay();
         fetchRealtimeBackendData();
-        setInterval(fetchRealtimeBackendData, 180000);
     </script>
 </body>
 </html>

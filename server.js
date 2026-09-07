@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const axios = require('axios');
 
 const app = express();
 
@@ -8,10 +7,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Contoh Endpoint API Real-time untuk Status Gunung Berapi
+// Endpoint API Status Gunung Berapi
 app.get('/api/volcano-status', async (req, res) => {
   try {
-    // Anda bisa memasukkan logika atau fetch data real-time di sini
     const volcanoData = {
       status: "WASPADA (Level II)",
       lastUpdate: new Date().toISOString(),
@@ -32,7 +30,7 @@ app.get('/api/volcano-status', async (req, res) => {
   }
 });
 
-// Jalankan server secara lokal jika tidak sedang di Vercel (Production)
+// Jalankan server secara lokal jika tidak di Vercel
 if (process.env.NODE_ENV !== 'production') {
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => {
@@ -40,5 +38,5 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// WAJIB ADA di baris paling bawah untuk sistem Vercel Serverless
+// Wajib untuk Vercel Serverless
 module.exports = app;
