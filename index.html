@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pantau Abu Vulkanik Real-time & Sebaran Kota</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map {
+            width: 100%;
+            height: 100%;
+            min-height: 500px;
+        }
+        .leaflet-control-layers {
+            background: #0f172a !important;
+            color: #f8fafc !important;
+            border: 1px solid #334155 !important;
+            border-radius: 8px !important;
+            padding: 6px !important;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
+        }
+        .leaflet-control-layers-separator {
+            border-top: 1px solid #334155 !important;
+        }
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #020617;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen flex flex-col">
+
+    <!-- Header & Dropdown Gunung -->
+    <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 shadow-md sticky top-0 z-[100]">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-3">
+            
+            <div class="flex items-center gap-2.5">
+                <div class="bg-gradient-to-br from-amber-500 to-red-600 p-2 rounded-xl shadow-lg flex items-center justify-center">
+                    <span class="text-base">🌋</span>
+                </div>
+                <div>
+                    <h1 class="text-xs font-bold tracking-wider uppercase text-amber-500 flex items-center gap-2">
+                        PANTAU ABU VULKANIK <span class="text-[9px] bg-red-600 px-1.5 py-0.2 rounded-full text-white font-semibold animate-pulse">Live</span>
+                    </h1>
+                    <p class="text-[11px] text-slate-400" id="header-subtitle">G. Krakatau · Live · VAAC Darwin</p>
+                </div>
+            </div>
+
+            <!-- Dropdown Pemilih Gunung -->
+            <div class="w-full md:w-80 relative z-[200]">
+                <div onclick="toggleDropdown()" class="w-full bg-slate-800 hover:bg-slate-700/80 border border-slate-700 rounded-xl px-3 py-2 flex justify-between items-center cursor-pointer transition shadow-inner">
+                    <div class="flex items-center gap-2 text-xs truncate">
+                        <span class="text-slate-400 font-medium uppercase tracking-wider">Gunung</span>
+                        <span class="text-slate-500">|</span>
+                        <span id="selected-mountain-name" class="font-bold text-slate-100 text-xs truncate">Krakatau</span>
+                    </div>
+                    <svg class="w-4 h-4 text-slate-400 transition-transform duration-200 shrink-0" id="dropdown-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+
+                <div id="mountain-dropdown" class="hidden absolute top-full left-0 right-0 mt-1 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-y-auto max-h-60 divide-y divide-slate-800">
+                    <!-- Diisi via JS -->
+                </div>
+            </div>
+
+            <div class="hidden lg:flex items-center gap-3 text-xs text-slate-400">
+                <span class="bg-slate-800 text-slate-300 px-2.5 py-1 rounded-lg border border-slate-700 font-mono text-[11px]" id="live-clock">--:--:-- WIB</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-7xl mx-auto p-3 grid grid-cols-1 lg:grid-cols-3 gap-3 flex-grow w-full relative z-10">
+        
+        <!-- Kolom Kiri -->
+        <div class="space-y-3 flex flex-col">
+            
+            <!-- PANEL STATUS ERUPSI -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg relative overflow-hidden">
+                <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 to-red-600"></div>
+                <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <span>⚠️</span> Status Erupsi
+                </h2>
+                <div id="eruption-status-box" class="p-2.5 rounded-lg border text-xs leading-relaxed transition-all"></div>
+                <div id="gdacs-status-box" class="mt-2"></div>
+            </div>
+
+            <!-- TIMELINE SEBARAN ABU -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg">
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Timeline Sebaran Abu</h2>
+                    <button id="play-btn" onclick="togglePlay()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-[11px] px-2.5 py-1 rounded border border-slate-700 font-medium transition flex items-center gap-1">
+                        ▶ Putar Animasi
+                    </button>
+                </div>
+                <div class="grid grid-cols-4 gap-1.5">
+                    <button onclick="setTimeline('now')" id="btn-now" class="bg-red-600 text-white text-[11px] font-bold py-1.5 rounded transition shadow">Now</button>
+                    <button onclick="setTimeline('6h')" id="btn-6h" class="bg-slate-800 text-slate-300 hover:bg-slate-700 text-[11px] font-medium py-1.5 rounded transition">+6h</button>
+                    <button onclick="setTimeline('12h')" id="btn-12h" class="bg-slate-800 text-slate-300 hover:bg-slate-700 text-[11px] font-medium py-1.5 rounded transition">+12h</button>
+                    <button onclick="setTimeline('18h')" id="btn-18h" class="bg-slate-800 text-slate-300 hover:bg-slate-700 text-[11px] font-medium py-1.5 rounded transition">+18h</button>
+                </div>
+                <p id="timeline-desc" class="text-[10px] text-slate-400 mt-2">Menampilkan zona sebaran abu kondisi saat ini (Real-time).</p>
+            </div>
+
+            <!-- JARAK SEBARAN KE WILAYAH -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg flex flex-col">
+                <div class="flex justify-between items-center mb-2">
+                    <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Jarak Sebaran ke Wilayah</h2>
+                    <button onclick="resetSearch()" id="reset-btn" class="hidden text-[10px] text-red-400 hover:underline">Reset</button>
+                </div>
+                
+                <div class="mb-2">
+                    <button onclick="getMyLocation()" class="w-full bg-blue-600 hover:bg-blue-500 text-white rounded-lg px-3 py-1.5 text-xs font-medium transition flex items-center justify-center gap-1.5 shadow">
+                        📍 Deteksi Jarak Dari Lokasi Saya
+                    </button>
+                </div>
+
+                <div class="relative mb-2">
+                    <input type="text" id="search-city" onkeypress="handleSearch(event)" placeholder="Cari kota lain (cth: Surabaya)..." class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 placeholder-slate-400 focus:outline-none focus:border-red-500 transition">
+                    <button onclick="searchGlobalCity()" class="absolute right-1 top-1 bottom-1 bg-red-600 hover:bg-red-500 text-white px-2.5 rounded-md text-xs font-medium transition">Cari</button>
+                </div>
+
+                <!-- Daftar kota dengan scroll internal jika panjang -->
+                <div id="city-status-list" class="space-y-1.5 max-h-[220px] overflow-y-auto pr-1"></div>
+            </div>
+
+            <!-- GAS VULKANIK -->
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 shadow-lg">
+                <h2 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Gas Vulkanik (SO₂)</h2>
+                <p class="text-[11px] text-slate-300 leading-relaxed">
+                    Sulfur dioksida adalah gas tak berwarna berbau tajam yang keluar dari magma. Pemantauan fluks SO₂ membantu mendeteksi pergerakan aktivitas vulkanik dalam skala masif.
+                </p>
+            </div>
+
+        </div>
+
+        <!-- PETA UTAMA -->
+        <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-lg min-h-[550px] lg:min-h-full relative flex flex-col">
+            <div id="map" class="flex-grow"></div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="bg-slate-900 border-t border-slate-800 py-2 text-center text-[11px] text-slate-500">
+        Dashboard Mitigasi Bencana MAF & AN &copy; 2026
+    </footer>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('live-clock').innerText = now.toTimeString().split(' ')[0] + " WIB";
+        }, 1000);
+
+        let mountains = [
+            {
+                id: "krakatau", name: "Krakatau", region: "Selat Sunda", coords: [-6.102, 105.423], active: true, statusType: "eruption",
+                eruptionText: "Terdeteksi 2 lapisan abu: abu di ketinggian ~15.2 km bergerak ke arah Barat Daya; dan abu di ketinggian ~4.6 km bergerak ke arah Barat.",
+                timeline: {
+                    'now': { radius: 55000, latlng: [-6.25, 106.05], desc: "Zona sebaran abu Krakatau saat ini." },
+                    '6h':  { radius: 75000, latlng: [-6.30, 106.30], desc: "Estimasi pergerakan sebaran abu +6 jam." },
+                    '12h': { radius: 95000, latlng: [-6.35, 106.55], desc: "Estimasi pergerakan sebaran abu +12 jam." },
+                    '18h': { radius: 120000, latlng: [-6.40, 106.80], desc: "Estimasi pergerakan sebaran abu +18 jam." }
+                }
+            },
+            {
+                id: "merapi", name: "Merapi", region: "Jawa Tengah / DIY", coords: [-7.540, 110.446], active: false, statusType: "anteng",
+                eruptionText: "Merapi lagi anteng, gak ada abu vulkanik yang lagi dipantau dari sana.",
+                timeline: {
+                    'now': { radius: 10000, latlng: [-7.540, 110.446], desc: "Zona aman aktivitas normal." },
+                    '6h':  { radius: 10000, latlng: [-7.540, 110.446], desc: "Kondisi stabil." },
+                    '12h': { radius: 10000, latlng: [-7.540, 110.446], desc: "Kondisi stabil." },
+                    '18h': { radius: 10000, latlng: [-7.540, 110.446], desc: "Kondisi stabil." }
+                }
+            },
+            {
+                id: "semeru", name: "Semeru", region: "Jawa Timur", coords: [-8.108, 112.922], active: true, statusType: "gdacs",
+                eruptionText: "Semeru lagi erupsi dan ngeluarin abu vulkanik ke arah timur.",
+                gdacsLevel: "Merah - bahaya tinggi",
+                timeline: {
+                    'now': { radius: 50000, latlng: [-8.150, 113.050], desc: "Zona sebaran abu Semeru saat ini." },
+                    '6h':  { radius: 70000, latlng: [-8.200, 113.300], desc: "Estimasi sebaran +6 jam." },
+                    '12h': { radius: 90000, latlng: [-8.250, 113.550], desc: "Estimasi sebaran +12 jam." },
+                    '18h': { radius: 110000, latlng: [-8.300, 113.800], desc: "Estimasi sebaran +18 jam." }
+                }
+            },
+            {
+                id: "lewotobi", name: "Lewotobi Laki-laki", region: "Flores, NTT", coords: [-8.534, 122.778], active: true, statusType: "eruption",
+                eruptionText: "Terdeteksi erupsi eksplosif dengan kolom abu tinggi di wilayah Flores.",
+                timeline: {
+                    'now': { radius: 45000, latlng: [-8.534, 122.778], desc: "Sebaran abu dominan ke arah Barat Laut." },
+                    '6h':  { radius: 60000, latlng: [-8.500, 122.600], desc: "Estimasi sebaran +6 jam." },
+                    '12h': { radius: 80000, latlng: [-8.450, 122.400], desc: "Estimasi sebaran +12 jam." },
+                    '18h': { radius: 100000, latlng: [-8.400, 122.200], desc: "Estimasi sebaran +18 jam." }
+                }
+            },
+            {
+                id: "sinabung", name: "Sinabung", region: "Sumatera Utara", coords: [3.170, 98.392], active: true, statusType: "gdacs",
+                eruptionText: "Aktivitas vulkanik tingkat III (Siaga). Potensi awan panas guguran.",
+                gdacsLevel: "Oranye - waspada",
+                timeline: {
+                    'now': { radius: 40000, latlng: [3.170, 98.392], desc: "Sebaran abu mengarah ke Timur." },
+                    '6h':  { radius: 60000, latlng: [3.150, 98.600], desc: "Estimasi sebaran +6 jam." },
+                    '12h': { radius: 80000, latlng: [3.100, 98.800], desc: "Estimasi sebaran +12 jam." },
+                    '18h': { radius: 100000, latlng: [3.050, 99.000], desc: "Estimasi sebaran +18 jam." }
+                }
+            },
+            {
+                id: "dukono", name: "Dukono", region: "Halmahera, Maluku Utara", coords: [1.693, 127.897], active: true, statusType: "eruption",
+                eruptionText: "Erupsi menerus dengan hembusan abu vulkanik secara konsisten.",
+                timeline: {
+                    'now': { radius: 50000, latlng: [1.693, 127.897], desc: "Sebaran abu ke arah Timur Laut." },
+                    '6h':  { radius: 70000, latlng: [1.700, 128.100], desc: "Estimasi sebaran +6 jam." },
+                    '12h': { radius: 90000, latlng: [1.750, 128.300], desc: "Estimasi sebaran +12 jam." },
+                    '18h': { radius: 110000, latlng: [1.800, 128.500], desc: "Estimasi sebaran +18 jam." }
+                }
+            },
+            {
+                id: "ibu", name: "Ibu", region: "Halmahera Barat", coords: [1.488, 127.630], active: true, statusType: "eruption",
+                eruptionText: "Letusan abu vulkanik teramati dengan ketebalan sedang hingga tebal.",
+                timeline: {
+                    'now': { radius: 45000, latlng: [1.488, 127.630], desc: "Sebaran abu ke arah Barat." },
+                    '6h':  { radius: 65000, latlng: [1.450, 127.400], desc: "Estimasi sebaran +6 jam." },
+                    '12h': { radius: 85000, latlng: [1.400, 127.200], desc: "Estimasi sebaran +12 jam." },
+                    '18h': { radius: 105000, latlng: [1.350, 127.000], desc: "Estimasi sebaran +18 jam." }
+                }
+            },
+            {
+                id: "kerinci", name: "Kerinci", region: "Jambi / Sumatera Barat", coords: [-1.697, 101.264], active: true, statusType: "gdacs",
+                eruptionText: "Terpantau erupsi abu vulkanik periodik dari kawah utama G. Kerinci.",
+                gdacsLevel: "Kuning - siaga",
+                timeline: {
+                    'now': { radius: 35000, latlng: [-1.697, 101.264], desc: "Sebaran abu mengarah ke Timur." },
+                    '6h':  { radius: 50000, latlng: [-1.650, 101.400], desc: "Estimasi sebaran +6 jam." },
+                    '12h': { radius: 70000, latlng: [-1.600, 101.600], desc: "Estimasi sebaran +12 jam." },
+                    '18h': { radius: 90000, latlng: [-1.550, 101.800], desc: "Estimasi sebaran +18 jam." }
+                }
+            }
+        ];
+
+        let currentMountain = mountains[0];
+
+        var defaultMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' });
+        var grayscaleMap = L.tileLayer('https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}', { maxZoom: 16, attribution: '&copy; Esri' });
+        var satelliteMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: '&copy; Esri' });
+
+        var map = L.map('map', {
+            center: currentMountain.coords,
+            zoom: 8,
+            layers: [defaultMap]
+        });
+
+        var baseLayers = { "Default Map": defaultMap, "Grayscale Map": grayscaleMap, "Satellite Map": satelliteMap };
+        
+        var volcanoMarker = L.marker(currentMountain.coords).bindPopup(`<b>G. ${currentMountain.name}</b><br>Pusat Erupsi Aktif`);
+        var ashCloud = L.circle(currentMountain.timeline.now.latlng, {
+            color: '#f97316', fillColor: '#f97316', fillOpacity: 0.35, radius: currentMountain.timeline.now.radius
+        }).bindPopup("Zona Sebaran Abu Vulkanik");
+
+        var epicenterLayer = L.layerGroup([volcanoMarker]).addTo(map);
+        var ashCloudLayer = L.layerGroup([ashCloud]).addTo(map);
+
+        L.control.layers(baseLayers, { "Titik Pusat Erupsi": epicenterLayer, "Zona Sebaran Abu": ashCloudLayer }, { collapsed: true }).addTo(map);
+
+        const defaultCities = [
+            { name: "Tangerang Selatan", coords: [-6.305, 106.724] },
+            { name: "Jakarta", coords: [-6.208, 106.845] },
+            { name: "Serang", coords: [-6.115, 106.150] },
+            { name: "Bandung", coords: [-6.917, 107.619] },
+            { name: "Bogor", coords: [-6.597, 106.799] },
+            { name: "Cilegon", coords: [-6.017, 106.016] },
+            { name: "Surabaya", coords: [-7.257, 112.752] },
+            { name: "Yogyakarta", coords: [-7.795, 110.369] },
+            { name: "Medan", coords: [3.595, 98.672] }
+        ];
+
+        let activeTime = 'now';
+        let userLocationData = null;
+        let customSearchedCity = null;
+
+        async function fetchRealtimeBackendData() {
+            try {
+                let response = await fetch('http://localhost:3000/api/volcano-status');
+                let result = await response.json();
+                if (result.success && result.data) {
+                    mountains = result.data;
+                    renderMountainDropdown();
+                }
+            } catch (e) {}
+        }
+
+        function renderMountainDropdown() {
+            const dropdown = document.getElementById('mountain-dropdown');
+            dropdown.innerHTML = '';
+            mountains.forEach(m => {
+                dropdown.innerHTML += `
+                    <div onclick="selectMountain('${m.id}')" class="px-3 py-2 hover:bg-slate-800 cursor-pointer transition flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-amber-500 text-xs">🌋</span>
+                            <div>
+                                <p class="text-xs font-bold text-slate-200">${m.name}</p>
+                                <p class="text-[10px] text-slate-400">${m.region}</p>
+                            </div>
+                        </div>
+                        ${m.active ? '<span class="text-[9px] bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded font-bold">AKTIF</span>' : '<span class="text-[9px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded">ANTENG</span>'}
+                    </div>
+                `;
+            });
+        }
+
+        function toggleDropdown() {
+            const dropdown = document.getElementById('mountain-dropdown');
+            const icon = document.getElementById('dropdown-icon');
+            dropdown.classList.toggle('hidden');
+            icon.classList.toggle('rotate-180');
+        }
+
+        function selectMountain(id) {
+            currentMountain = mountains.find(m => m.id === id);
+            document.getElementById('selected-mountain-name').innerText = currentMountain.name;
+            document.getElementById('header-subtitle').innerText = `G. ${currentMountain.name} · ${currentMountain.active ? 'Live' : 'Stabil'} · VAAC Darwin`;
+            toggleDropdown();
+
+            map.setView(currentMountain.coords, 8);
+            volcanoMarker.setLatLng(currentMountain.coords);
+            volcanoMarker.bindPopup(`<b>G. ${currentMountain.name}</b><br>Pusat Erupsi Aktif`);
+
+            setTimeline('now');
+            updateEruptionStatusPanel();
+            updateCityDisplay();
+        }
+
+        function updateEruptionStatusPanel() {
+            const statusBox = document.getElementById('eruption-status-box');
+            const gdacsBox = document.getElementById('gdacs-status-box');
+            gdacsBox.innerHTML = '';
+
+            if (currentMountain.statusType === 'anteng') {
+                statusBox.className = "p-2.5 rounded-lg border bg-emerald-500/10 border-emerald-500/30 text-emerald-300 text-xs leading-relaxed flex gap-2 items-start";
+                statusBox.innerHTML = `<span class="text-sm">✅</span> <div>${currentMountain.eruptionText}</div>`;
+            } else if (currentMountain.statusType === 'gdacs') {
+                statusBox.className = "p-2.5 rounded-lg border bg-amber-500/10 border-amber-500/30 text-amber-300 text-xs leading-relaxed flex gap-2 items-start";
+                statusBox.innerHTML = `<span class="text-sm">⚠️</span> <div>${currentMountain.eruptionText}</div>`;
+                
+                gdacsBox.innerHTML = `
+                    <div class="p-2.5 rounded-lg bg-red-950/40 border border-red-900/50 text-red-300 text-xs flex items-center gap-2">
+                        <span>🛡️</span>
+                        <div>
+                            <p class="font-bold uppercase text-[10px] text-red-400">Status Bahaya (GDACS)</p>
+                            <p class="font-semibold">${currentMountain.gdacsLevel}</p>
+                        </div>
+                    </div>
+                `;
+            } else {
+                statusBox.className = "p-2.5 rounded-lg border bg-amber-500/10 border-amber-500/30 text-amber-300 text-xs leading-relaxed flex gap-2 items-start";
+                statusBox.innerHTML = `<span class="text-sm">⚠️</span> <div>${currentMountain.eruptionText}</div>`;
+            }
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        function getMyLocation() {
+            if (!navigator.geolocation) {
+                alert("Geolokasi tidak didukung oleh browser Anda.");
+                return;
+            }
+
+            const container = document.getElementById('city-status-list');
+            container.innerHTML = `<p class="text-[11px] text-blue-400 text-center py-2 animate-pulse">Mengakses GPS perangkat Anda...</p>`;
+
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const lat = position.coords.latitude;
+                const lon = position.coords.longitude;
+
+                let locName = "Lokasi Saya (GPS)";
+                try {
+                    const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`);
+                    const data = await res.json();
+                    if (data && data.address) {
+                        locName = data.address.city || data.address.town || data.address.village || data.address.county || "Lokasi Saya (GPS)";
+                    }
+                } catch (e) {}
+
+                userLocationData = { name: locName, coords: [lat, lon] };
+                map.setView([lat, lon], 10);
+                updateCityDisplay();
+            }, (error) => {
+                alert("Gagal mendeteksi lokasi. Pastikan izin GPS diaktifkan.");
+                updateCityDisplay();
+            }, { timeout: 10000 });
+        }
+
+        function updateCityDisplay() {
+            const container = document.getElementById('city-status-list');
+            const resetBtn = document.getElementById('reset-btn');
+            container.innerHTML = '';
+
+            const activeTimelineData = currentMountain.timeline[activeTime];
+
+            let citiesToRender = [...defaultCities];
+            if (customSearchedCity) citiesToRender.unshift(customSearchedCity);
+            if (userLocationData) citiesToRender.unshift(userLocationData);
+
+            if (userLocationData || customSearchedCity) {
+                resetBtn.classList.remove('hidden');
+            } else {
+                resetBtn.classList.add('hidden');
+            }
+
+            citiesToRender.forEach((city, index) => {
+                const distMeters = calculateDistance(activeTimelineData.latlng[0], activeTimelineData.latlng[1], city.coords[0], city.coords[1]) * 1000;
+                const distKm = (distMeters / 1000).toFixed(1);
+
+                let statusHTML = "";
+                let boxStyle = "";
+                let textColor = "";
+
+                if (distMeters <= activeTimelineData.radius) {
+                    statusHTML = `<span class="bg-red-600 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm animate-pulse">KENA</span>`;
+                    boxStyle = "bg-red-500/10 border-red-500/20";
+                    textColor = "text-red-400";
+                } else if (distMeters <= activeTimelineData.radius + 35000) {
+                    statusHTML = `<span class="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] font-bold px-1.5 py-0.5 rounded">WASPADA</span>`;
+                    boxStyle = "bg-amber-500/10 border-amber-500/20";
+                    textColor = "text-amber-400";
+                } else {
+                    statusHTML = `<span class="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-semibold px-1.5 py-0.5 rounded">AMAN</span>`;
+                    boxStyle = "bg-slate-800/40 border-slate-800";
+                    textColor = "text-slate-200";
+                }
+
+                let tagLabel = "";
+                if (index === 0 && userLocationData && city === userLocationData) {
+                    boxStyle = "bg-blue-500/15 border-blue-500/30 ring-1 ring-blue-500/40";
+                    tagLabel = '<span class="text-[9px] bg-blue-500 text-white px-1 rounded font-bold">Lokasi Anda</span>';
+                } else if (customSearchedCity && city === customSearchedCity) {
+                    boxStyle = "bg-amber-500/15 border-amber-500/30 ring-1 ring-amber-500/40";
+                    tagLabel = '<span class="text-[9px] bg-amber-500 text-slate-950 px-1 rounded font-bold">Hasil Cari</span>';
+                }
+
+                container.innerHTML += `
+                    <div class="border ${boxStyle} p-2 rounded-lg flex justify-between items-center transition">
+                        <div>
+                            <p class="font-bold text-xs ${textColor}">${city.name} ${tagLabel}</p>
+                            <p class="text-[10px] text-slate-400">Jarak ± ${distKm} km dari pusat abu</p>
+                        </div>
+                        ${statusHTML}
+                    </div>
+                `;
+            });
+        }
+
+        async function searchGlobalCity() {
+            const query = document.getElementById('search-city').value.trim();
+            if (!query) return;
+
+            const container = document.getElementById('city-status-list');
+            container.innerHTML = `<p class="text-[11px] text-slate-400 text-center py-2 animate-pulse">Mencari wilayah di Indonesia...</p>`;
+
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&countrycodes=id&limit=1`);
+                const data = await response.json();
+
+                if (data.length === 0) {
+                    alert("Wilayah tidak ditemukan di Indonesia.");
+                    updateCityDisplay();
+                    return;
+                }
+
+                const place = data[0];
+                customSearchedCity = {
+                    name: place.display_name.split(',')[0],
+                    coords: [parseFloat(place.lat), parseFloat(place.lon)]
+                };
+                updateCityDisplay();
+            } catch (error) {
+                alert("Gagal terhubung ke server pencarian.");
+                updateCityDisplay();
+            }
+        }
+
+        function handleSearch(e) { if (e.key === 'Enter') searchGlobalCity(); }
+
+        function resetSearch() {
+            customSearchedCity = null;
+            userLocationData = null;
+            document.getElementById('search-city').value = '';
+            map.setView(currentMountain.coords, 8);
+            updateCityDisplay();
+        }
+
+        function setTimeline(timeframe) {
+            activeTime = timeframe;
+            ['now', '6h', '12h', '18h'].forEach(t => {
+                const btn = document.getElementById(`btn-${t}`);
+                if (t === timeframe) {
+                    btn.className = "bg-red-600 text-white text-xs font-bold py-1.5 rounded transition shadow";
+                } else {
+                    btn.className = "bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs font-medium py-1.5 rounded transition";
+                }
+            });
+
+            const tData = currentMountain.timeline[timeframe];
+            ashCloud.setRadius(tData.radius);
+            ashCloud.setLatLng(tData.latlng);
+            document.getElementById('timeline-desc').innerText = tData.desc;
+
+            updateCityDisplay();
+        }
+
+        let playInterval = null;
+        function togglePlay() {
+            const btn = document.getElementById('play-btn');
+            const sequence = ['now', '6h', '12h', '18h'];
+            
+            if (playInterval) {
+                clearInterval(playInterval);
+                playInterval = null;
+                btn.innerHTML = "▶ Putar Animasi";
+                btn.className = "bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1 rounded border border-slate-700 font-medium transition flex items-center gap-1";
+            } else {
+                btn.innerHTML = "⏸ Jeda";
+                btn.className = "bg-amber-600 hover:bg-amber-500 text-white text-xs px-2.5 py-1 rounded font-medium transition flex items-center gap-1";
+                
+                let index = sequence.indexOf(activeTime);
+                playInterval = setInterval(() => {
+                    index = (index + 1) % sequence.length;
+                    setTimeline(sequence[index]);
+                }, 2000);
+            }
+        }
+
+        renderMountainDropdown();
+        updateEruptionStatusPanel();
+        setTimeline('now');
+        fetchRealtimeBackendData();
+        setInterval(fetchRealtimeBackendData, 180000);
+    </script>
+</body>
+</html>
